@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract StakingContract is Initializable, OwnableUpgradeable {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
+contract StakingContract is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+    using SafeERC20 for IERC20;
 
     // Staking token and reward token
-    IERC20Upgradeable public stakingToken;
-    IERC20Upgradeable public rewardToken;
+    IERC20 public stakingToken;
+    IERC20 public rewardToken;
     address public rewardSource;
 
     // Staking parameters
@@ -41,14 +42,17 @@ contract StakingContract is Initializable, OwnableUpgradeable {
     event RewardPerBlockSet(uint256 amount);
     event Staked(address indexed user, uint256 amount);
     event WithdrawOrHarvest(address indexed user, uint256 stakedAmount, uint256 rewardAmount, bool isFullWithdrawal);
+    event Withdrawn(address indexed user, uint256 amount);
+    event RewardPaid(address indexed user, uint256 reward);
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    /// @custom:oz-upgrades-unsafe-allow-constructor
     constructor() {
         _disableInitializers();
     }
 
     function initialize() public initializer {
-        __Ownable_init();
+        __Ownable_init(msg.sender);
+        __ReentrancyGuard_init();
         lastUpdateBlock = block.number;
     }
 
@@ -58,7 +62,7 @@ contract StakingContract is Initializable, OwnableUpgradeable {
      */
     function setStakingToken(address _token) external onlyOwner {
         require(_token != address(0), "Invalid token address");
-        stakingToken = IERC20Upgradeable(_token);
+        stakingToken = IERC20(_token);
         emit StakingTokenSet(_token);
     }
 
@@ -68,7 +72,7 @@ contract StakingContract is Initializable, OwnableUpgradeable {
      */
     function setRewardToken(address _token) external onlyOwner {
         require(_token != address(0), "Invalid token address");
-        rewardToken = IERC20Upgradeable(_token);
+        rewardToken = IERC20(_token);
         emit RewardTokenSet(_token);
     }
 
