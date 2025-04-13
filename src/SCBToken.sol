@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract SCBToken is ERC20, Ownable {
-    constructor() ERC20("SCBToken", "SCB") Ownable() {
+    constructor() ERC20("SCBToken", "SCB") Ownable(msg.sender) {
         // Mint 1 million tokens to the contract deployer
         _mint(msg.sender, 1000000 * 10 ** decimals());
     }
