@@ -5,6 +5,8 @@ import "forge-std/Script.sol";
 import "../src/StakingContract.sol";
 import "../src/SHMToken.sol";
 import "../src/SCBToken.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
 contract DeployScript is Script {
     function run() external {
@@ -17,9 +19,9 @@ contract DeployScript is Script {
         vm.txGasPrice(3000000000); // 3 gwei
         vm.setEnv("FOUNDRY_PROFILE", "default");
         
-        // Deploy tokens
         vm.startBroadcast(deployerPrivateKey);
         
+        // 1. Deploy tokens
         console.log("Deploying SHMToken...");
         SHMToken shmToken = new SHMToken();
         console.log("SHMToken deployed at:", address(shmToken));
@@ -28,26 +30,41 @@ contract DeployScript is Script {
         SCBToken scbToken = new SCBToken();
         console.log("SCBToken deployed at:", address(scbToken));
 
-        // Deploy staking contract implementation
+        // 2. Deploy ProxyAdmin
+        console.log("Deploying ProxyAdmin...");
+        ProxyAdmin proxyAdmin = new ProxyAdmin(deployer);
+        console.log("ProxyAdmin deployed at:", address(proxyAdmin));
+
+        // 3. Deploy implementation
         console.log("Deploying StakingContract implementation...");
         StakingContract implementation = new StakingContract();
-        bytes memory initData = abi.encodeWithSelector(StakingContract.initialize.selector);
-        StakingContract stakingContract = StakingContract(deployProxy(address(implementation), initData));
-        console.log("StakingContract deployed at:", address(stakingContract));
+        console.log("Implementation deployed at:", address(implementation));
 
-        // Setup staking contract
+        // 4. Deploy proxy
+        console.log("Deploying TransparentUpgradeableProxy...");
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            address(implementation),
+            address(proxyAdmin),
+            abi.encodeWithSelector(StakingContract.initialize.selector)
+        );
+        console.log("Proxy deployed at:", address(proxy));
+
+        // 5. Get StakingContract instance at proxy address
+        StakingContract stakingContract = StakingContract(address(proxy));
+
+        // 6. Setup staking contract
         console.log("Setting up staking contract...");
         stakingContract.setStakingToken(address(shmToken));
         stakingContract.setRewardToken(address(scbToken));
         stakingContract.setRewardSource(deployer);
         stakingContract.setRewardPerBlock(1e18);
 
-        // Mint initial tokens
+        // 7. Mint initial tokens
         console.log("Minting initial tokens...");
         shmToken.mint(deployer, 1000000e18);
         scbToken.mint(deployer, 1000000e18);
 
-        // Approve tokens
+        // 8. Approve tokens
         console.log("Setting token approvals...");
         shmToken.approve(address(stakingContract), type(uint256).max);
         scbToken.approve(address(stakingContract), type(uint256).max);
@@ -58,24 +75,8 @@ contract DeployScript is Script {
         console.log("-----------------------------------");
         console.log("SHMToken:", address(shmToken));
         console.log("SCBToken:", address(scbToken));
-        console.log("StakingContract:", address(stakingContract));
-    }
-
-    function deployProxy(address implementation, bytes memory initData) internal returns (address) {
-        bytes memory deploymentData = abi.encodePacked(
-            hex"3d602d80600a3d3981f3363d3d373d3d3d363d73",
-            implementation,
-            hex"5af43d82803e903d91602b57fd5bf3"
-        );
-
-        address proxy;
-        assembly {
-            proxy := create(0, add(deploymentData, 0x20), mload(deploymentData))
-        }
-
-        (bool success,) = proxy.call(initData);
-        require(success, "Proxy initialization failed");
-
-        return proxy;
+        console.log("ProxyAdmin:", address(proxyAdmin));
+        console.log("Implementation:", address(implementation));
+        console.log("Proxy:", address(proxy));
     }
 } 
